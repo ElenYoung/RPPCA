@@ -45,7 +45,7 @@ dev = [
 ]
 
 [project.urls]
-Repository = "https://github.com/rppca/rppca"
+Repository = "https://github.com/ElenYoung/RPPCA"
 
 [tool.setuptools.packages.find]
 where = ["src"]
