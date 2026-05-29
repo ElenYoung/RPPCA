@@ -503,6 +503,18 @@ class TestDemeanedDataWarning:
             # gamma=-1 is standard PCA; no warning needed
             rppca_decompose(X_demeaned, 3, gamma=-1.0)
 
+    def test_gamma_zero_no_warning(self):
+        """gamma=0 (second-moment PCA) should NOT warn even on demeaned data."""
+        rng = np.random.default_rng(42)
+        X = rng.normal(size=(200, 50))
+        X_demeaned = X - X.mean(axis=0)
+
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            # gamma=0 means the mean term is absent by design; no warning needed
+            rppca_decompose(X_demeaned, 3, gamma=0.0)
+
     def test_demeaned_data_gives_identical_results(self):
         """On demeaned data, gamma=-1 and gamma=10 must give identical results."""
         rng = np.random.default_rng(2024)

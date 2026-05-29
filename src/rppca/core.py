@@ -109,8 +109,10 @@ def rppca_decompose(
     second_moment = X_work.T @ X_work / T          # (N, N)
     x_bar = X_work.mean(axis=0, keepdims=True).T    # (N, 1)
 
-    # Warn if the data appears demeaned — this makes γ irrelevant
-    if gamma != -1.0:
+    # Warn if the data appears demeaned — this makes γ irrelevant.
+    # Skip for γ=-1 (standard PCA) and γ=0 (second-moment PCA) since the
+    # mean term is either cancelled out or absent by design.
+    if gamma not in (-1.0, 0.0):
         _warn_if_demeaned(x_bar, second_moment, gamma)
 
     S = second_moment + gamma * (x_bar @ x_bar.T)   # (N, N)
