@@ -28,6 +28,8 @@ Special cases:
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 from numpy.typing import NDArray
 
@@ -80,6 +82,14 @@ def rppca_decompose(
     * Setting ``gamma = -1`` exactly recovers standard PCA of the sample
       covariance matrix; setting ``gamma = 0`` gives PCA of the second-moment
       matrix ``(1/T) X^T X``.
+
+    Warnings
+    --------
+    **Do NOT demean the data** before calling this function.  RP-PCA's
+    advantage over PCA comes entirely from the mean vector x̄ in the term
+    ``γ · x̄ x̄ᵀ``.  If you subtract the column means (``X - X.mean(axis=0)``),
+    x̄ becomes zero and the γ parameter has **no effect** — RP-PCA degenerates
+    to standard PCA regardless of γ.  Pass raw (un-demeaned) excess returns.
     """
     X = np.asarray(X, dtype=np.float64)
     _check_inputs(X, n_factors)
@@ -98,6 +108,11 @@ def rppca_decompose(
     # Both terms are N×N.  We never need to form the T×T weight matrix.
     second_moment = X_work.T @ X_work / T          # (N, N)
     x_bar = X_work.mean(axis=0, keepdims=True).T    # (N, 1)
+
+    # Warn if the data appears demeaned — this makes γ irrelevant
+    if gamma != -1.0:
+        _warn_if_demeaned(x_bar, second_moment, gamma)
+
     S = second_moment + gamma * (x_bar @ x_bar.T)   # (N, N)
 
     # --- Eigen-decomposition (descending order) ---
@@ -184,6 +199,45 @@ def _top_k_eigh(
     # Reverse to descending order and take top k
     idx = np.argsort(eigenvalues)[::-1][:k]
     return eigenvalues[idx], eigenvectors[:, idx]
+
+
+def _warn_if_demeaned(
+    x_bar: NDArray[np.floating],
+    second_moment: NDArray[np.floating],
+    gamma: float,
+) -> None:
+    """Emit a warning if the data appears to have been time-series demeaned.
+
+    When x_bar ≈ 0, the risk-premium term γ·x̄x̄ᵀ vanishes and RP-PCA
+    degenerates to standard PCA on the second-moment matrix regardless of γ.
+    This is the most common cause of γ having no effect.
+    """
+    # Measure the relative magnitude of the mean term vs the second moment
+    mean_norm_sq = float((x_bar.T @ x_bar).item())     # ||x_bar||²
+    diag_mean = float(np.mean(np.diag(second_moment)))  # avg variance scale
+
+    # The γ-perturbation is γ * x̄x̄ᵀ.  Its spectral norm equals
+    # |γ| * ||x̄||², while the typical eigenvalue scale is diag_mean.
+    # If the perturbation is < 1e-8 relative to the scale, it's negligible.
+    if diag_mean > 0:
+        relative_signal = abs(gamma) * mean_norm_sq / diag_mean
+    else:
+        return  # degenerate data; skip warning
+
+    if relative_signal < 1e-6:
+        warnings.warn(
+            "The input data appears to be time-series demeaned "
+            "(each column has near-zero mean).  "
+            "RP-PCA relies on the asset means (x̄) to distinguish itself "
+            "from standard PCA: the key matrix is "
+            "S = (1/T)XᵀX + γ·x̄x̄ᵀ.  "
+            "When x̄ ≈ 0, the γ term vanishes and all γ values produce "
+            "identical results.  "
+            "Do NOT demean excess returns before calling RP-PCA.  "
+            "Pass the raw (un-demeaned) excess returns instead.",
+            UserWarning,
+            stacklevel=3,
+        )
 
 
 def _check_inputs(X: NDArray, n_factors: int) -> None:

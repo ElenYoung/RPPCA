@@ -168,6 +168,37 @@ The population limit of S converges to:
 
 For PCA (γ=-1), the signal is driven only by **variance** Σ_F. For RP-PCA (γ>0), the **mean** μ_F also contributes, boosting weak factors that have high Sharpe ratios (large μ_F relative to Σ_F).
 
+## ⚠️ Do NOT Demean the Data
+
+> **Critical:** RP-PCA requires the raw (un-demeaned) excess returns.
+
+The key matrix for RP-PCA is:
+
+```
+S = (1/T) XᵀX + γ · X̄ X̄ᵀ
+```
+
+The entire advantage of RP-PCA over standard PCA comes from the **mean vector X̄** (the time-series average of each asset's excess returns). If you subtract column means before fitting:
+
+```python
+# ❌ WRONG — this destroys the risk-premium signal!
+X_demeaned = X - X.mean(axis=0)
+model = RPPCA(n_factors=5, gamma=10)
+model.fit(X_demeaned)  # gamma has NO effect — identical to PCA!
+```
+
+then X̄ becomes zero, the γ·X̄X̄ᵀ term vanishes, and **all γ values produce identical results**. RP-PCA degenerates to standard PCA.
+
+```python
+# ✅ CORRECT — pass raw excess returns (not demeaned)
+model = RPPCA(n_factors=5, gamma=10)
+model.fit(X)  # gamma works as intended
+```
+
+**Common pitfall:** Standard PCA implementations often demean data as a preprocessing step. Do not apply this habit to RP-PCA — the mean IS the signal.
+
+The library will emit a `UserWarning` if it detects that the input data has been demeaned.
+
 ## Look-Ahead Bias
 
 > ⚠️ **Critical for quantitative strategies**

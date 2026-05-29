@@ -463,5 +463,81 @@ class TestWeakFactorDetection:
         )
 
 
+# ---------------------------------------------------------------------------
+# 8. Demeaned data warning and gamma-invariance
+# ---------------------------------------------------------------------------
+
+class TestDemeanedDataWarning:
+    """
+    Verify that RP-PCA warns when data is demeaned (x_bar ≈ 0),
+    since this makes the gamma parameter irrelevant.
+    """
+
+    def test_demeaned_data_triggers_warning(self):
+        """Demeaned data should trigger a UserWarning."""
+        rng = np.random.default_rng(42)
+        X = rng.normal(0.01, 0.05, size=(200, 50))
+        X_demeaned = X - X.mean(axis=0)  # column means → 0
+
+        with pytest.warns(UserWarning, match="demeaned"):
+            rppca_decompose(X_demeaned, 3, gamma=10.0)
+
+    def test_raw_data_no_warning(self, factor_model_data):
+        """Raw (un-demeaned) data with nonzero means should NOT warn."""
+        X, _, _, _ = factor_model_data
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            # Should NOT raise any warning
+            rppca_decompose(X, 3, gamma=10.0)
+
+    def test_pca_gamma_minus1_no_warning(self):
+        """PCA (gamma=-1) should NOT warn even on demeaned data."""
+        rng = np.random.default_rng(42)
+        X = rng.normal(size=(200, 50))
+        X_demeaned = X - X.mean(axis=0)
+
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            # gamma=-1 is standard PCA; no warning needed
+            rppca_decompose(X_demeaned, 3, gamma=-1.0)
+
+    def test_demeaned_data_gives_identical_results(self):
+        """On demeaned data, gamma=-1 and gamma=10 must give identical results."""
+        rng = np.random.default_rng(2024)
+        T, N, K = 300, 50, 3
+        F = rng.normal(0.01, 0.05, size=(T, K))
+        Lambda = rng.normal(size=(N, K)) / np.sqrt(N)
+        X = F @ Lambda.T + rng.normal(0, 0.02, size=(T, N))
+        X_demeaned = X - X.mean(axis=0)
+
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            _, _, evals_pca = rppca_decompose(X_demeaned, K, gamma=-1.0)
+            _, _, evals_rp = rppca_decompose(X_demeaned, K, gamma=10.0)
+
+        # Eigenvalues should be exactly the same
+        np.testing.assert_allclose(evals_pca, evals_rp, atol=1e-12)
+
+    def test_raw_data_gives_different_results(self):
+        """On raw data with nonzero means, gamma=-1 and gamma=10 must differ."""
+        rng = np.random.default_rng(2024)
+        T, N, K = 300, 50, 3
+        F = rng.normal(0.01, 0.05, size=(T, K))
+        Lambda = rng.normal(size=(N, K)) / np.sqrt(N)
+        X = F @ Lambda.T + rng.normal(0, 0.02, size=(T, N))
+
+        _, _, evals_pca = rppca_decompose(X, K, gamma=-1.0)
+        _, _, evals_rp = rppca_decompose(X, K, gamma=10.0)
+
+        # Eigenvalues should NOT be the same
+        assert not np.allclose(evals_pca, evals_rp), (
+            "Raw data with nonzero means should give different eigenvalues "
+            "for gamma=-1 vs gamma=10"
+        )
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
