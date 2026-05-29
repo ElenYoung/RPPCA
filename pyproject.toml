@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rppca"
-version = "0.1.0"
+version = "0.1.1"
 description = "Risk-Premium PCA for estimating latent asset-pricing factors"
 readme = "README.md"
 license = {text = "MIT"}
